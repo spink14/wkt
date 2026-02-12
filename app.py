@@ -67,7 +67,7 @@ with st.sidebar:
             # FORCED FLOATS AND FORMATTING
             # If the buttons still do not work, we use the value directly from the state
             new_max = st.number_input(
-                "Starting 5RM",
+                "Starting 5RM @ RPE 9",
                 value=float(row['Max']),
                 step=5.0,
                 min_value=0.0,
