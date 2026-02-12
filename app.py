@@ -2,7 +2,6 @@ import streamlit as st
 from streamlit_gsheets import GSheetsConnection
 import pandas as pd
 from datetime import datetime, date
-import time 
 
 # --- 1. PAGE SETUP ---
 st.set_page_config(page_title="Dylan & Dane Madcow Pro", layout="wide")
@@ -108,24 +107,39 @@ with st.sidebar:
             st.session_state.df_all.at[index, 'Increment'] = float(new_inc)
 
     if st.button("💾 Sync to Cloud"):
-        try:
-            # Save Weights
-            conn.update(spreadsheet=SHEET_URL, data=st.session_state.df_all)
-            
-            # Save Date (Setting Attribute to start_date)
-            settings_to_save = pd.DataFrame([
-                {"Attribute": "start_date", "Value": str(st.session_state.start_date)}
-            ])
-            conn.update(spreadsheet=SHEET_URL, worksheet="Settings", data=settings_to_save)
-            
-            st.cache_data.clear()
-            st.success("Weights & Date Saved!")
-            time.sleep(1)
-            st.snow()
-            # Rerun so the new date reflects in the calculation immediately
-            st.rerun()
-        except Exception as e:
-            st.error(f"Sync failed: {e}")
+        with st.status("Pushing data to Google Sheets...", expanded=False) as status:
+            try:
+                # Save Weights
+                conn.update(spreadsheet=SHEET_URL, data=st.session_state.df_all)
+                
+                # Save Date
+                settings_to_save = pd.DataFrame([
+                    {"Attribute": "start_date", "Value": str(st.session_state.start_date)}
+                ])
+                conn.update(spreadsheet=SHEET_URL, worksheet="Settings", data=settings_to_save)
+                
+                # Clear Cache
+                st.cache_data.clear()
+                
+                # 1. Immediate Feedback (The Toast)
+                st.toast("Sync Successful!", icon='✅')
+                
+                status.update(label="Cloud Sync Complete!", state="complete", expanded=False)
+                
+                # 2. Celebration!
+                st.snow()
+                
+                # 3. Force the app to "remember" the success state briefly
+                st.session_state.sync_success = True
+                
+            except Exception as e:
+                st.error(f"Sync failed: {e}")
+
+# Display a persistent message if sync was successful
+if st.session_state.get('sync_success', False):
+    st.success("All data is now safe in the cloud. Happy lifting!", icon="☁️")
+    # Reset it so it disappears on the NEXT interaction
+    st.session_state.sync_success = False
 
 # --- 5. DATA RETRIEVAL ---
 def get_stats(lift_name):
