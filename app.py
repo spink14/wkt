@@ -135,7 +135,7 @@ with tab2: # Wednesday
         sets = [custom_round(top * i, round_val) for i in [0.5, 0.625, 0.75, 1.0]]
         with st.container(border=True):
             st.subheader(name)
-            st.write(f"Ramps: {' → '.join(map(str, sets[:-1]))} → **{sets[-1]} x 5**")
+            st.write(f"Ramps (x5): {' → '.join(map(str, sets[:-1]))} → **{sets[-1]}**")
 
 with tab3: # Friday
     for lift in ["Squat", "Bench", "Row"]:
