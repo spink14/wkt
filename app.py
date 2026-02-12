@@ -12,7 +12,11 @@ SHEET_URL = "https://docs.google.com/spreadsheets/d/YOUR_SHEET_ID_HERE/edit#gid=
 conn = st.connection("gsheets", type=GSheetsConnection)
 
 def load_data():
-    return conn.read(spreadsheet=SHEET_URL, ttl=0)
+    df = conn.read(spreadsheet=SHEET_URL, ttl=0)
+    # FORCING TYPES: This prevents the .01 increment bug
+    df['Max'] = df['Max'].astype(float)
+    df['Increment'] = df['Increment'].astype(float)
+    return df
 
 if 'df_all' not in st.session_state:
     st.session_state.df_all = load_data()
@@ -51,33 +55,36 @@ with st.sidebar:
     st.divider()
     st.header(f"📈 Edit {current_user}'s 5RMs")
     
-    # We edit a copy so we can verify changes before syncing
-    temp_df = st.session_state.df_all.copy()
-    user_mask = temp_df['User'] == current_user
+    # We update session state directly to ensure the UI stays in sync
+    user_mask = st.session_state.df_all['User'] == current_user
     
-    for index in temp_df[user_mask].index:
-        row = temp_df.loc[index]
+    for index in st.session_state.df_all[user_mask].index:
+        row = st.session_state.df_all.loc[index]
         with st.expander(f"Edit {row['Lift']}"):
-            # ADDED 'step' parameter here to fix the +/- button issue
-            temp_df.at[index, 'Max'] = st.number_input(
+            # Added format="%.1f" to stop the 0.01 precision forcing
+            new_max = st.number_input(
                 f"5RM", 
                 value=float(row['Max']), 
-                step=5.0,  # Increments by 5
-                key=f"m_{index}"
+                step=5.0, 
+                format="%.1f",
+                key=f"m_{index}_{current_user}"
             )
-            temp_df.at[index, 'Increment'] = st.number_input(
+            new_inc = st.number_input(
                 f"Inc %", 
                 value=float(row['Increment']), 
-                step=0.5,  # Increments by 0.5%
-                key=f"i_{index}"
+                step=0.5, 
+                format="%.1f",
+                key=f"i_{index}_{current_user}"
             )
+            # Update the session state dataframe
+            st.session_state.df_all.at[index, 'Max'] = new_max
+            st.session_state.df_all.at[index, 'Increment'] = new_inc
 
     if st.button("💾 Save All Changes to Cloud"):
         try:
-            conn.update(spreadsheet=SHEET_URL, data=temp_df)
-            st.session_state.df_all = temp_df
+            conn.update(spreadsheet=SHEET_URL, data=st.session_state.df_all)
             st.cache_data.clear()
-            st.success("Successfully synced with Google Sheets!")
+            st.success("Cloud Sync Complete!")
             st.balloons()
         except Exception as e:
             st.error(f"Sync failed! Error: {e}")
@@ -95,7 +102,7 @@ def get_stats(lift_name):
         st.error(f"Missing '{lift_name}' for {current_user}!")
         return 0, 0
 
-# --- 6. TABS ---
+# --- 6. MAIN WORKOUT UI ---
 st.title(f"Workout: {current_user} (Week {week})")
 tab1, tab2, tab3 = st.tabs(["Monday", "Wednesday", "Friday"])
 
@@ -118,6 +125,7 @@ with tab2: # Wednesday
         with st.container(border=True):
             st.subheader(name)
             st.write(f"Ramps: {' → '.join(map(str, sets[:-1]))} → **{sets[-1]} x 5**")
+            st.caption(f"Plates: {get_plate_breakdown(sets[-1], bar_wt)}")
 
 with tab3: # Friday
     for lift in ["Squat", "Bench", "Row"]:
