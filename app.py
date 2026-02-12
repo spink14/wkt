@@ -5,15 +5,13 @@ import pandas as pd
 # --- 1. PAGE SETUP ---
 st.set_page_config(page_title="Dylan & Dane Madcow Pro", layout="wide")
 
-# Replace this with your actual Google Sheet ID (the long string in the URL)
-SHEET_URL = "https://docs.google.com/spreadsheets/d/1-I9O0Gexxmvkb7zd-NzJqpm2MbYHIAVtAfeLkp-m0Vk/edit?gid=0#gid=0"
+# Replace this with your actual Google Sheet ID
+SHEET_URL = "https://docs.google.com/spreadsheets/d/YOUR_SHEET_ID_HERE/edit#gid=0"
 
 # --- 2. CONNECTION ---
-# type="gsheets" tells Streamlit to look for [connections.gsheets] in secrets
 conn = st.connection("gsheets", type=GSheetsConnection)
 
 def load_data():
-    # ttl=0 means it always checks the cloud for new data
     return conn.read(spreadsheet=SHEET_URL, ttl=0)
 
 if 'df_all' not in st.session_state:
@@ -46,7 +44,7 @@ with st.sidebar:
     current_user = st.radio("Lifter Selection:", ["Dylan", "Dane"], horizontal=True)
     
     st.divider()
-    week = st.number_input("Current Week", min_value=1, value=1)
+    week = st.number_input("Current Week", min_value=1, value=1, step=1)
     round_val = st.radio("Rounding", [5, 2.5, 1], index=0)
     bar_wt = st.number_input("Bar Weight", value=45, step=5)
     
@@ -60,12 +58,22 @@ with st.sidebar:
     for index in temp_df[user_mask].index:
         row = temp_df.loc[index]
         with st.expander(f"Edit {row['Lift']}"):
-            temp_df.at[index, 'Max'] = st.number_input(f"5RM", value=float(row['Max']), key=f"m_{index}")
-            temp_df.at[index, 'Increment'] = st.number_input(f"Inc %", value=float(row['Increment']), key=f"i_{index}")
+            # ADDED 'step' parameter here to fix the +/- button issue
+            temp_df.at[index, 'Max'] = st.number_input(
+                f"5RM", 
+                value=float(row['Max']), 
+                step=5.0,  # Increments by 5
+                key=f"m_{index}"
+            )
+            temp_df.at[index, 'Increment'] = st.number_input(
+                f"Inc %", 
+                value=float(row['Increment']), 
+                step=0.5,  # Increments by 0.5%
+                key=f"i_{index}"
+            )
 
     if st.button("💾 Save All Changes to Cloud"):
         try:
-            # CRUD operation enabled by service account
             conn.update(spreadsheet=SHEET_URL, data=temp_df)
             st.session_state.df_all = temp_df
             st.cache_data.clear()
