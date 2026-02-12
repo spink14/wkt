@@ -48,11 +48,11 @@ def get_plate_breakdown(target_weight, bar_weight):
 
 # --- 4. SIDEBAR ---
 with st.sidebar:
-    st.title("🏋️ Madcow Duo")
+    st.title("Madcow Duo")
     current_user = st.radio("Lifter Selection:", ["Dylan", "Dane"], horizontal=True)
     
     st.divider()
-    st.header("🧮 Plate Calculator")
+    st.header("Plate Calculator")
     calc_target = st.number_input("Weight to Check", value=135, step=5)
     bar_wt = st.number_input("Barbell Weight", value=45, step=5)
     st.info(f"**Load per side:** {get_plate_breakdown(calc_target, bar_wt)}")
@@ -63,7 +63,7 @@ with st.sidebar:
     round_val = st.radio("Rounding (Plate Increments)", [5, 2.5, 1], index=0)
     
     st.divider()
-    st.header(f"📈 Edit {current_user}'s 5RMs")
+    st.header(f"Edit {current_user}'s 5RMs")
     
     user_mask = st.session_state.df_all['User'] == current_user
     
@@ -91,7 +91,6 @@ with st.sidebar:
             conn.update(spreadsheet=SHEET_URL, data=st.session_state.df_all)
             st.cache_data.clear()
             st.success("Cloud Sync Successful!")
-            st.balloons()
         except Exception as e:
             st.error(f"Sync failed! Error: {e}")
 
