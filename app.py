@@ -2,6 +2,7 @@ import streamlit as st
 from streamlit_gsheets import GSheetsConnection
 import pandas as pd
 from datetime import datetime, date
+import time 
 
 # --- 1. PAGE SETUP ---
 st.set_page_config(page_title="Dylan & Dane Madcow Pro", layout="wide")
@@ -119,6 +120,7 @@ with st.sidebar:
             
             st.cache_data.clear()
             st.success("Weights & Date Saved!")
+            time.sleep(1)
             st.snow()
             # Rerun so the new date reflects in the calculation immediately
             st.rerun()
