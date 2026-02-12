@@ -125,21 +125,12 @@ with st.sidebar:
                 st.toast("Sync Successful!", icon='✅')
                 
                 status.update(label="Cloud Sync Complete!", state="complete", expanded=False)
-                
-                # 2. Celebration!
-                st.snow()
-                
+
                 # 3. Force the app to "remember" the success state briefly
                 st.session_state.sync_success = True
                 
             except Exception as e:
                 st.error(f"Sync failed: {e}")
-
-# Display a persistent message if sync was successful
-if st.session_state.get('sync_success', False):
-    st.success("Synced!", icon="☁️")
-    # Reset it so it disappears on the NEXT interaction
-    st.session_state.sync_success = False
 
 # --- 5. DATA RETRIEVAL ---
 def get_stats(lift_name):
