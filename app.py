@@ -6,7 +6,7 @@ import pandas as pd
 st.set_page_config(page_title="Dylan & Dane Madcow Pro", layout="wide")
 
 # Replace this with your actual Google Sheet ID
-SHEET_URL = "https://docs.google.com/spreadsheets/d/YOUR_SHEET_ID_HERE/edit#gid=0"
+SHEET_URL = "https://docs.google.com/spreadsheets/d/1-I9O0Gexxmvkb7zd-NzJqpm2MbYHIAVtAfeLkp-m0Vk/edit?gid=0#gid=0"
 
 # --- 2. CONNECTION ---
 conn = st.connection("gsheets", type=GSheetsConnection)
