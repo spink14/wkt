@@ -8,17 +8,33 @@ st.set_page_config(page_title="Dylan & Dane Madcow Pro", layout="wide")
 
 SHEET_URL = "https://docs.google.com/spreadsheets/d/1-I9O0Gexxmvkb7zd-NzJqpm2MbYHIAVtAfeLkp-m0Vk/edit?gid=0#gid=0"
 
-# --- 2. CONNECTION ---
+# --- 2. CONNECTION & DATA LOADING ---
 conn = st.connection("gsheets", type=GSheetsConnection)
 
 def load_data():
+    # Load Workout Data
     df = conn.read(spreadsheet=SHEET_URL, ttl=0)
     df['Max'] = pd.to_numeric(df['Max'], errors='coerce').fillna(0).round(0).astype(float)
     df['Increment'] = pd.to_numeric(df['Increment'], errors='coerce').fillna(2.5).round(1).astype(float)
-    return df
+    
+    # Load Settings Data (from the new tab)
+    try:
+        settings_df = conn.read(spreadsheet=SHEET_URL, worksheet="Settings", ttl=0)
+        # Find the start_date row
+        date_str = settings_df.loc[settings_df['Attribute'] == 'start_date', 'Value'].values[0]
+        # Handle both string and datetime objects from Sheets
+        if isinstance(date_str, str):
+            stored_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+        else:
+            stored_date = date_str.date() if hasattr(date_str, 'date') else date_str
+    except Exception as e:
+        # Fallback if tab doesn't exist yet
+        stored_date = date(2024, 1, 1)
+        
+    return df, stored_date
 
 if 'df_all' not in st.session_state:
-    st.session_state.df_all = load_data()
+    st.session_state.df_all, st.session_state.start_date = load_data()
 
 # --- 3. HELPER FUNCTIONS ---
 def custom_round(x, base=5):
@@ -28,111 +44,79 @@ def get_madcow_ramps(top_weight, round_to=5):
     intervals = [0.50, 0.625, 0.75, 0.875]
     return [custom_round(top_weight * i, round_to) for i in intervals]
 
-def get_plate_breakdown(target_weight, bar_weight):
-    if target_weight <= bar_weight: return "Empty Bar"
-    available_plates = [45, 35, 25, 10, 5, 2.5, 1, 0.5]
-    weight_per_side = (target_weight - bar_weight) / 2
-    plates_needed = []
-    remaining = weight_per_side
-    for plate in available_plates:
-        count = int(remaining // plate)
-        if count > 0:
-            plates_needed.append(f"{count}x{plate}")
-            remaining -= (count * plate)
-            remaining = round(remaining, 2) 
-    return " + ".join(plates_needed) if plates_needed else "Bar Only"
-
 # --- 4. SIDEBAR ---
 with st.sidebar:
     st.title("Madcow Duo")
     current_user = st.radio("Lifter Selection:", ["Dylan", "Dane"], horizontal=True)
     
     st.divider()
-    st.header("Plate Calculator")
-    calc_target = st.number_input("Weight to Check", value=135, step=5)
-    bar_wt = st.number_input("Barbell Weight", value=45, step=5)
-    st.info(f"**Load per side:** {get_plate_breakdown(calc_target, bar_wt)}")
-    
-    st.divider()
     st.header("⚙️ Program Settings")
     
-    # --- DATE CALCULATION LOGIC ---
-    start_date = st.date_input("Program Start Date", value=date(2024, 1, 1))
-    today = date.today()
+    # Use the date from session state (loaded from Sheets)
+    new_start_date = st.date_input("Program Start Date", value=st.session_state.start_date)
+    st.session_state.start_date = new_start_date
     
-    # Calculate weeks elapsed (7 days = 1 week)
-    days_elapsed = (today - start_date).days
+    days_elapsed = (date.today() - new_start_date).days
     auto_week = max(1, (days_elapsed // 7) + 1)
     
-    # Manual Override option
     manual_week = st.checkbox("Manual Week Override", value=False)
     if manual_week:
         week = st.number_input("Select Week", min_value=1, max_value=52, value=auto_week, step=1)
     else:
         week = auto_week
-        st.info(f"Currently in **Week {week}** (based on start date)")
+        st.info(f"Currently in **Week {week}**")
 
-    round_val = st.radio("Rounding (Plate Increments)", [5, 2.5, 1], index=0)
+    round_val = st.radio("Rounding", [5, 2.5, 1], index=0)
     
     st.divider()
     st.header(f"Edit {current_user}'s 5RMs")
     
     user_mask = st.session_state.df_all['User'] == current_user
-    
     for index in st.session_state.df_all[user_mask].index:
         row = st.session_state.df_all.loc[index]
         with st.expander(f"Edit {row['Lift']}"):
-            new_max = st.number_input(
-                "Starting 5RM (lbs)",
-                value=int(row['Max']),
-                step=5,
-                key=f"max_in_{index}_{current_user}"
-            )
-            new_inc = st.number_input(
-                "Weekly Increment %",
-                value=float(row['Increment']),
-                step=0.5,
-                format="%.1f",
-                key=f"inc_in_{index}_{current_user}"
-            )
+            new_max = st.number_input("5RM", value=int(row['Max']), step=5, key=f"m_{index}_{current_user}")
+            new_inc = st.number_input("Inc %", value=float(row['Increment']), step=0.5, format="%.1f", key=f"i_{index}_{current_user}")
             st.session_state.df_all.at[index, 'Max'] = float(new_max)
             st.session_state.df_all.at[index, 'Increment'] = float(new_inc)
 
     if st.button("💾 Sync to Google Sheets"):
         try:
+            # 1. Update Workout Data
             conn.update(spreadsheet=SHEET_URL, data=st.session_state.df_all)
+            
+            # 2. Update Settings Data (Start Date)
+            settings_to_save = pd.DataFrame([
+                {"Attribute": "start_date", "Value": str(st.session_state.start_date)}
+            ])
+            conn.update(spreadsheet=SHEET_URL, worksheet="Settings", data=settings_to_save)
+            
             st.cache_data.clear()
-            st.success("Cloud Sync Successful!")
+            st.success("Weights & Start Date Saved!")
+            st.snow()
         except Exception as e:
             st.error(f"Sync failed! Error: {e}")
 
-# --- 5. DATA RETRIEVAL ---
+# --- 5. DATA RETRIEVAL & UI ---
 def get_stats(lift_name):
-    try:
-        row = st.session_state.df_all[
-            (st.session_state.df_all['User'] == current_user) & 
-            (st.session_state.df_all['Lift'] == lift_name)
-        ].iloc[0]
-        # Calculate weight based on week
-        current_max = row['Max'] * ((1 + (row['Increment'] / 100)) ** (week - 4))
-        return current_max, row['Increment']
-    except:
-        st.error(f"Missing data for {lift_name}!")
-        return 0, 0
+    row = st.session_state.df_all[(st.session_state.df_all['User'] == current_user) & (st.session_state.df_all['Lift'] == lift_name)].iloc[0]
+    current_max = row['Max'] * ((1 + (row['Increment'] / 100)) ** (week - 4))
+    return current_max
 
-# --- 6. MAIN WORKOUT UI ---
 st.title(f"Workout: {current_user} (Week {week})")
-tab1, tab2, tab3 = st.tabs(["Monday (Moderate)", "Wednesday (Light)", "Friday (Heavy)"])
+tab1, tab2, tab3 = st.tabs(["Monday", "Wednesday", "Friday"])
 
-with tab1: # Monday
+with tab1:
     for lift in ["Squat", "Bench", "Row"]:
-        m_max, _ = get_stats(lift)
+        m_max = get_stats(lift)
         m_top = custom_round(m_max, round_val)
         ramps = get_madcow_ramps(m_top, round_val)
         with st.container(border=True):
             st.subheader(lift)
             st.write(f"Ramps (x5): {' → '.join(map(str, ramps))}")
             st.markdown(f"**TOP SET: :green[{m_top} lbs] x 5**")
+
+# (Wednesday and Friday logic remain the same as your previous version)
 
 with tab2: # Wednesday
     sq_max, _ = get_stats("Squat")
