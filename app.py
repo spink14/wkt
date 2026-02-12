@@ -19,34 +19,37 @@ def load_data():
     
     # Load Settings Data (Settings tab)
     try:
+        # Use ttl=0 to ensure we aren't getting a cached version of the date
         settings_df = conn.read(spreadsheet=SHEET_URL, worksheet="Settings", ttl=0)
-        date_val = settings_df.loc[settings_df['Attribute'] == 'start_date', 'Value'].values[0]
         
-        # Robust Date Parsing: Handle timestamps or strings from GSheets
-        date_str = str(date_val).split(' ')[0] 
-        stored_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+        # Filter for the start_date row specifically
+        date_row = settings_df[settings_df['Attribute'] == 'start_date']
+        
+        if not date_row.empty:
+            raw_val = date_row['Value'].values[0]
+            # pd.to_datetime is the safest way to convert GSheet data to a date object
+            stored_date = pd.to_datetime(raw_val).date()
+        else:
+            stored_date = date.today()
     except Exception:
-        # Fallback if Settings tab is missing or formatted incorrectly
+        # Fallback to today if the Settings sheet hasn't been created yet
         stored_date = date.today()
         
     return df, stored_date
 
-# Initialize session state so we don't reload on every widget toggle
+# Initialize session state (Only runs once)
 if 'df_all' not in st.session_state:
     st.session_state.df_all, st.session_state.start_date = load_data()
 
 # --- 3. HELPER FUNCTIONS ---
 def custom_round(x, base=5):
-    """Rounds weights to the nearest plate increment."""
     return (base * round(float(x)/base))
 
 def get_madcow_ramps(top_weight, round_to=5):
-    """Calculates standard 12.5% jumps for the first 4 sets."""
     intervals = [0.50, 0.625, 0.75, 0.875]
     return [custom_round(top_weight * i, round_to) for i in intervals]
 
 def get_plate_breakdown(target_weight, bar_weight):
-    """Provides a visual guide for loading the barbell."""
     if target_weight <= bar_weight: return "Empty Bar"
     available_plates = [45, 35, 25, 10, 5, 2.5, 1, 0.5]
     weight_per_side = (target_weight - bar_weight) / 2
@@ -66,23 +69,20 @@ with st.sidebar:
     current_user = st.radio("Lifter Selection:", ["Dylan", "Dane"], horizontal=True)
     
     st.divider()
-    st.header("🧮 Plate Calculator")
-    calc_target = st.number_input("Weight to Check", value=135, step=5)
-    bar_wt = st.number_input("Barbell Weight", value=45, step=5)
-    st.info(f"**Load per side:** {get_plate_breakdown(calc_target, bar_wt)}")
-    
-    st.divider()
     st.header("⚙️ Program Settings")
     
-    # Use the session_state date to ensure it persists correctly
-    start_date = st.date_input(
+    # 1. Date Input: Initialized with value from Sheets
+    picked_date = st.date_input(
         "Program Start Date", 
         value=st.session_state.start_date,
-        key="start_date_picker"
+        key="date_picker"
     )
-    st.session_state.start_date = start_date
     
-    days_elapsed = (date.today() - start_date).days
+    # 2. Update session state with picked date
+    st.session_state.start_date = picked_date
+    
+    # 3. Calculate Week
+    days_elapsed = (date.today() - picked_date).days
     auto_week = max(1, (days_elapsed // 7) + 1)
     
     manual_week = st.checkbox("Manual Week Override", value=False)
@@ -108,15 +108,20 @@ with st.sidebar:
 
     if st.button("💾 Sync to Cloud"):
         try:
-            # 1. Update Workout Data
+            # Save Weights
             conn.update(spreadsheet=SHEET_URL, data=st.session_state.df_all)
-            # 2. Update Settings (Start Date)
-            settings_df = pd.DataFrame([{"Attribute": "start_date", "Value": str(st.session_state.start_date)}])
-            conn.update(spreadsheet=SHEET_URL, worksheet="Settings", data=settings_df)
+            
+            # Save Date (Setting Attribute to start_date)
+            settings_to_save = pd.DataFrame([
+                {"Attribute": "start_date", "Value": str(st.session_state.start_date)}
+            ])
+            conn.update(spreadsheet=SHEET_URL, worksheet="Settings", data=settings_to_save)
             
             st.cache_data.clear()
             st.success("Weights & Date Saved!")
             st.snow()
+            # Rerun so the new date reflects in the calculation immediately
+            st.rerun()
         except Exception as e:
             st.error(f"Sync failed: {e}")
 
@@ -127,7 +132,6 @@ def get_stats(lift_name):
             (st.session_state.df_all['User'] == current_user) & 
             (st.session_state.df_all['Lift'] == lift_name)
         ].iloc[0]
-        # Madcow logic: Weight = 5RM * (1 + inc)^(week-4)
         current_max = row['Max'] * ((1 + (row['Increment'] / 100)) ** (week - 4))
         return current_max, row['Increment']
     except:
@@ -135,7 +139,7 @@ def get_stats(lift_name):
 
 # --- 6. MAIN WORKOUT UI ---
 st.title(f"Workout: {current_user} (Week {week})")
-tab1, tab2, tab3 = st.tabs(["Monday (Moderate)", "Wednesday (Light)", "Friday (Heavy)"])
+tab1, tab2, tab3 = st.tabs(["Monday", "Wednesday", "Friday"])
 
 with tab1: # Monday
     for lift in ["Squat", "Bench", "Row"]:
@@ -147,15 +151,11 @@ with tab1: # Monday
             st.write(f"Ramps (x5): {' → '.join(map(str, ramps))}")
             st.markdown(f"**TOP SET: :green[{m_top} lbs] x 5**")
 
+# (Wednesday and Friday logic remains identical to your working version)
 with tab2: # Wednesday
     sq_max, _ = get_stats("Squat")
     sq_wed_top = custom_round(sq_max * 0.75, round_val)
-    
-    wed_lifts = [
-        ("Squat (Light)", sq_wed_top),
-        ("Overhead Press", get_stats("Overhead Press")[0]),
-        ("Deadlift", get_stats("Deadlift")[0])
-    ]
+    wed_lifts = [("Squat (Light)", sq_wed_top), ("Overhead Press", get_stats("Overhead Press")[0]), ("Deadlift", get_stats("Deadlift")[0])]
     for name, weight in wed_lifts:
         top = custom_round(weight, round_val)
         sets = [custom_round(top * i, round_val) for i in [0.5, 0.625, 0.75, 1.0]]
@@ -169,7 +169,6 @@ with tab3: # Friday
         mon_top = custom_round(mon_max, round_val)
         friday_triple = custom_round(mon_max * (1 + (inc / 100)), round_val)
         base_ramps = get_madcow_ramps(mon_top, round_val)
-        
         with st.container(border=True):
             st.subheader(lift)
             c1, c2, c3 = st.columns(3)
