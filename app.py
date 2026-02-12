@@ -1,11 +1,11 @@
 import streamlit as st
 from streamlit_gsheets import GSheetsConnection
 import pandas as pd
+from datetime import datetime, date
 
 # --- 1. PAGE SETUP ---
 st.set_page_config(page_title="Dylan & Dane Madcow Pro", layout="wide")
 
-# Replace this with your actual Google Sheet ID
 SHEET_URL = "https://docs.google.com/spreadsheets/d/1-I9O0Gexxmvkb7zd-NzJqpm2MbYHIAVtAfeLkp-m0Vk/edit?gid=0#gid=0"
 
 # --- 2. CONNECTION ---
@@ -13,7 +13,6 @@ conn = st.connection("gsheets", type=GSheetsConnection)
 
 def load_data():
     df = conn.read(spreadsheet=SHEET_URL, ttl=0)
-    # SANITIZATION: Force values to clean floats/ints to prevent the 0.01 increment bug
     df['Max'] = pd.to_numeric(df['Max'], errors='coerce').fillna(0).round(0).astype(float)
     df['Increment'] = pd.to_numeric(df['Increment'], errors='coerce').fillna(2.5).round(1).astype(float)
     return df
@@ -23,16 +22,13 @@ if 'df_all' not in st.session_state:
 
 # --- 3. HELPER FUNCTIONS ---
 def custom_round(x, base=5):
-    """Rounds weights to the nearest plate increment (5, 2.5, or 1)."""
     return (base * round(float(x)/base))
 
 def get_madcow_ramps(top_weight, round_to=5):
-    """Standard 12.5% intervals for sets 1-4."""
     intervals = [0.50, 0.625, 0.75, 0.875]
     return [custom_round(top_weight * i, round_to) for i in intervals]
 
 def get_plate_breakdown(target_weight, bar_weight):
-    """Calculates exactly which plates to put on each side of the bar."""
     if target_weight <= bar_weight: return "Empty Bar"
     available_plates = [45, 35, 25, 10, 5, 2.5, 1, 0.5]
     weight_per_side = (target_weight - bar_weight) / 2
@@ -59,7 +55,23 @@ with st.sidebar:
     
     st.divider()
     st.header("⚙️ Program Settings")
-    week = st.number_input("Current Week", min_value=1, max_value=52, value=1, step=1)
+    
+    # --- DATE CALCULATION LOGIC ---
+    start_date = st.date_input("Program Start Date", value=date(2024, 1, 1))
+    today = date.today()
+    
+    # Calculate weeks elapsed (7 days = 1 week)
+    days_elapsed = (today - start_date).days
+    auto_week = max(1, (days_elapsed // 7) + 1)
+    
+    # Manual Override option
+    manual_week = st.checkbox("Manual Week Override", value=False)
+    if manual_week:
+        week = st.number_input("Select Week", min_value=1, max_value=52, value=auto_week, step=1)
+    else:
+        week = auto_week
+        st.info(f"Currently in **Week {week}** (based on start date)")
+
     round_val = st.radio("Rounding (Plate Increments)", [5, 2.5, 1], index=0)
     
     st.divider()
@@ -101,6 +113,7 @@ def get_stats(lift_name):
             (st.session_state.df_all['User'] == current_user) & 
             (st.session_state.df_all['Lift'] == lift_name)
         ].iloc[0]
+        # Calculate weight based on week
         current_max = row['Max'] * ((1 + (row['Increment'] / 100)) ** (week - 4))
         return current_max, row['Increment']
     except:
@@ -109,7 +122,7 @@ def get_stats(lift_name):
 
 # --- 6. MAIN WORKOUT UI ---
 st.title(f"Workout: {current_user} (Week {week})")
-tab1, tab2, tab3 = st.tabs(["Monday (Moderate))", "Wednesday (Light)", "Friday (Heavy)"])
+tab1, tab2, tab3 = st.tabs(["Monday (Moderate)", "Wednesday (Light)", "Friday (Heavy)"])
 
 with tab1: # Monday
     for lift in ["Squat", "Bench", "Row"]:
