@@ -22,31 +22,31 @@ def load_data():
         settings_df = conn.read(spreadsheet=SHEET_URL, worksheet="Settings", ttl=0)
         date_val = settings_df.loc[settings_df['Attribute'] == 'start_date', 'Value'].values[0]
         
-        # Handle different date formats coming from Google Sheets
-        if isinstance(date_val, str):
-            stored_date = datetime.strptime(date_val, '%Y-%m-%d').date()
-        elif hasattr(date_val, 'date'):
-            stored_date = date_val.date()
-        else:
-            stored_date = date_val
+        # Robust Date Parsing: Handle timestamps or strings from GSheets
+        date_str = str(date_val).split(' ')[0] 
+        stored_date = datetime.strptime(date_str, '%Y-%m-%d').date()
     except Exception:
-        # Fallback if Settings tab is missing or empty
+        # Fallback if Settings tab is missing or formatted incorrectly
         stored_date = date.today()
         
     return df, stored_date
 
+# Initialize session state so we don't reload on every widget toggle
 if 'df_all' not in st.session_state:
     st.session_state.df_all, st.session_state.start_date = load_data()
 
 # --- 3. HELPER FUNCTIONS ---
 def custom_round(x, base=5):
+    """Rounds weights to the nearest plate increment."""
     return (base * round(float(x)/base))
 
 def get_madcow_ramps(top_weight, round_to=5):
+    """Calculates standard 12.5% jumps for the first 4 sets."""
     intervals = [0.50, 0.625, 0.75, 0.875]
     return [custom_round(top_weight * i, round_to) for i in intervals]
 
 def get_plate_breakdown(target_weight, bar_weight):
+    """Provides a visual guide for loading the barbell."""
     if target_weight <= bar_weight: return "Empty Bar"
     available_plates = [45, 35, 25, 10, 5, 2.5, 1, 0.5]
     weight_per_side = (target_weight - bar_weight) / 2
@@ -74,11 +74,15 @@ with st.sidebar:
     st.divider()
     st.header("⚙️ Program Settings")
     
-    # Date logic
-    new_start_date = st.date_input("Program Start Date", value=st.session_state.start_date)
-    st.session_state.start_date = new_start_date
+    # Use the session_state date to ensure it persists correctly
+    start_date = st.date_input(
+        "Program Start Date", 
+        value=st.session_state.start_date,
+        key="start_date_picker"
+    )
+    st.session_state.start_date = start_date
     
-    days_elapsed = (date.today() - new_start_date).days
+    days_elapsed = (date.today() - start_date).days
     auto_week = max(1, (days_elapsed // 7) + 1)
     
     manual_week = st.checkbox("Manual Week Override", value=False)
@@ -104,11 +108,11 @@ with st.sidebar:
 
     if st.button("💾 Sync to Cloud"):
         try:
-            # Save Weights
+            # 1. Update Workout Data
             conn.update(spreadsheet=SHEET_URL, data=st.session_state.df_all)
-            # Save Date to Settings tab
-            settings_to_save = pd.DataFrame([{"Attribute": "start_date", "Value": str(st.session_state.start_date)}])
-            conn.update(spreadsheet=SHEET_URL, worksheet="Settings", data=settings_to_save)
+            # 2. Update Settings (Start Date)
+            settings_df = pd.DataFrame([{"Attribute": "start_date", "Value": str(st.session_state.start_date)}])
+            conn.update(spreadsheet=SHEET_URL, worksheet="Settings", data=settings_df)
             
             st.cache_data.clear()
             st.success("Weights & Date Saved!")
@@ -123,8 +127,8 @@ def get_stats(lift_name):
             (st.session_state.df_all['User'] == current_user) & 
             (st.session_state.df_all['Lift'] == lift_name)
         ].iloc[0]
+        # Madcow logic: Weight = 5RM * (1 + inc)^(week-4)
         current_max = row['Max'] * ((1 + (row['Increment'] / 100)) ** (week - 4))
-        # FIXED: Returning both values again to fix the TypeError
         return current_max, row['Increment']
     except:
         return 0, 0
