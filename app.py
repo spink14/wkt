@@ -55,7 +55,7 @@ with st.sidebar:
     bar_wt = st.number_input("Bar Weight", value=45, step=5)
     
     st.divider()
-    st.header(f"📈 Edit {current_user}'s 5RMs")
+    st.header(f"📈 Edit {current_user}'s 5RMs at RPE 9")
     
     user_mask = st.session_state.df_all['User'] == current_user
     
