@@ -137,7 +137,7 @@ with st.sidebar:
 
 # Display a persistent message if sync was successful
 if st.session_state.get('sync_success', False):
-    st.success("All data is now safe in the cloud. Happy lifting!", icon="☁️")
+    st.success("Synced!", icon="☁️")
     # Reset it so it disappears on the NEXT interaction
     st.session_state.sync_success = False
 
