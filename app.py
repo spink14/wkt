@@ -109,7 +109,7 @@ def get_stats(lift_name):
 
 # --- 6. MAIN WORKOUT UI ---
 st.title(f"Workout: {current_user} (Week {week})")
-tab1, tab2, tab3 = st.tabs(["Monday (Heavy)", "Wednesday (Light)", "Friday (Intensity)"])
+tab1, tab2, tab3 = st.tabs(["Monday (Moderate))", "Wednesday (Light)", "Friday (Heavy)"])
 
 with tab1: # Monday
     for lift in ["Squat", "Bench", "Row"]:
