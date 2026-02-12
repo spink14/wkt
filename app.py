@@ -45,7 +45,7 @@ def get_plate_breakdown(target_weight, bar_weight):
 
 # --- 4. SIDEBAR ---
 with st.sidebar:
-    st.title("🏋️ Workout Settings")
+    st.title("Workout Settings")
     current_user = st.radio("Lifter Selection:", ["Dylan", "Dane"], horizontal=True)
     
     st.divider()
@@ -55,7 +55,7 @@ with st.sidebar:
     bar_wt = st.number_input("Bar Weight", value=45, step=5)
     
     st.divider()
-    st.header(f"📈 Edit {current_user}'s 5RMs at RPE 9")
+    st.header(f"Edit {current_user}'s Starting Weights")
     
     user_mask = st.session_state.df_all['User'] == current_user
     
@@ -93,7 +93,6 @@ with st.sidebar:
             conn.update(spreadsheet=SHEET_URL, data=st.session_state.df_all)
             st.cache_data.clear()
             st.success("Cloud Sync Successful!")
-            st.balloons()
         except Exception as e:
             st.error(f"Sync failed! Error: {e}")
 
@@ -124,7 +123,7 @@ with tab1: # Monday (Volume)
             st.subheader(lift)
             st.write(f"Ramps (x5): {' → '.join(map(str, ramps))}")
             st.markdown(f"**TOP SET: :green[{m_top} lbs] x 5**")
-            st.caption(f"Plates per side: {get_plate_breakdown(m_top, bar_wt)}")
+            
 
 with tab2: # Wednesday (Recovery)
     sq_max, _ = get_stats("Squat")
