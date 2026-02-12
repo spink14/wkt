@@ -13,9 +13,9 @@ conn = st.connection("gsheets", type=GSheetsConnection)
 
 def load_data():
     df = conn.read(spreadsheet=SHEET_URL, ttl=0)
-    # SANITIZATION: Force values to clean floats rounded to 1 decimal
-    df['Max'] = pd.to_numeric(df['Max'], errors='coerce').fillna(0).apply(lambda x: round(float(x), 1))
-    df['Increment'] = pd.to_numeric(df['Increment'], errors='coerce').fillna(0).apply(lambda x: round(float(x), 1))
+    # SANITIZATION: Force values to clean floats/ints to prevent the 0.01 increment bug
+    df['Max'] = pd.to_numeric(df['Max'], errors='coerce').fillna(0).round(0).astype(float)
+    df['Increment'] = pd.to_numeric(df['Increment'], errors='coerce').fillna(2.5).round(1).astype(float)
     return df
 
 if 'df_all' not in st.session_state:
@@ -23,14 +23,16 @@ if 'df_all' not in st.session_state:
 
 # --- 3. HELPER FUNCTIONS ---
 def custom_round(x, base=5):
-    """Rounds weights to the nearest plate increment (e.g., 5 or 2.5)."""
+    """Rounds weights to the nearest plate increment (5, 2.5, or 1)."""
     return (base * round(float(x)/base))
 
 def get_madcow_ramps(top_weight, round_to=5):
+    """Standard 12.5% intervals for sets 1-4."""
     intervals = [0.50, 0.625, 0.75, 0.875]
     return [custom_round(top_weight * i, round_to) for i in intervals]
 
 def get_plate_breakdown(target_weight, bar_weight):
+    """Calculates exactly which plates to put on each side of the bar."""
     if target_weight <= bar_weight: return "Empty Bar"
     available_plates = [45, 35, 25, 10, 5, 2.5, 1, 0.5]
     weight_per_side = (target_weight - bar_weight) / 2
@@ -41,58 +43,55 @@ def get_plate_breakdown(target_weight, bar_weight):
         if count > 0:
             plates_needed.append(f"{count}x{plate}")
             remaining -= (count * plate)
-    return " + ".join(plates_needed)
+            remaining = round(remaining, 2) 
+    return " + ".join(plates_needed) if plates_needed else "Bar Only"
 
 # --- 4. SIDEBAR ---
 with st.sidebar:
-    st.title("Workout Settings")
+    st.title("🏋️ Madcow Duo")
     current_user = st.radio("Lifter Selection:", ["Dylan", "Dane"], horizontal=True)
     
     st.divider()
-    # Explicitly setting step=1 for the week
-    week = st.number_input("Current Week", min_value=1, max_value=52, value=1, step=1)
-    round_val = st.radio("Rounding (Plate Increments)", [5, 2.5, 1], index=0)
-    bar_wt = st.number_input("Bar Weight", value=45, step=5)
+    st.header("🧮 Plate Calculator")
+    calc_target = st.number_input("Weight to Check", value=135, step=5)
+    bar_wt = st.number_input("Barbell Weight", value=45, step=5)
+    st.info(f"**Load per side:** {get_plate_breakdown(calc_target, bar_wt)}")
     
     st.divider()
-    st.header(f"Edit {current_user}'s Starting Weights")
+    st.header("⚙️ Program Settings")
+    week = st.number_input("Current Week", min_value=1, max_value=52, value=1, step=1)
+    round_val = st.radio("Rounding (Plate Increments)", [5, 2.5, 1], index=0)
+    
+    st.divider()
+    st.header(f"📈 Edit {current_user}'s 5RMs")
     
     user_mask = st.session_state.df_all['User'] == current_user
     
-    # We use a button-triggered update to avoid multiple cloud writes
     for index in st.session_state.df_all[user_mask].index:
         row = st.session_state.df_all.loc[index]
         with st.expander(f"Edit {row['Lift']}"):
-            
-            # FORCED FLOATS AND FORMATTING
-            # If the buttons still do not work, we use the value directly from the state
             new_max = st.number_input(
-                "Starting 5RM @ RPE 9",
-                value=float(row['Max']),
-                step=5.0,
-                min_value=0.0,
-                format="%.1f",
+                "Starting 5RM (lbs)",
+                value=int(row['Max']),
+                step=5,
                 key=f"max_in_{index}_{current_user}"
             )
-            
             new_inc = st.number_input(
                 "Weekly Increment %",
                 value=float(row['Increment']),
                 step=0.5,
-                min_value=0.0,
                 format="%.1f",
                 key=f"inc_in_{index}_{current_user}"
             )
-            
-            # Instantly update the local state dataframe
-            st.session_state.df_all.at[index, 'Max'] = new_max
-            st.session_state.df_all.at[index, 'Increment'] = new_inc
+            st.session_state.df_all.at[index, 'Max'] = float(new_max)
+            st.session_state.df_all.at[index, 'Increment'] = float(new_inc)
 
     if st.button("💾 Sync to Google Sheets"):
         try:
             conn.update(spreadsheet=SHEET_URL, data=st.session_state.df_all)
             st.cache_data.clear()
             st.success("Cloud Sync Successful!")
+            st.balloons()
         except Exception as e:
             st.error(f"Sync failed! Error: {e}")
 
@@ -103,18 +102,17 @@ def get_stats(lift_name):
             (st.session_state.df_all['User'] == current_user) & 
             (st.session_state.df_all['Lift'] == lift_name)
         ].iloc[0]
-        # Weight = Max * (1 + inc)^(week-4)
         current_max = row['Max'] * ((1 + (row['Increment'] / 100)) ** (week - 4))
         return current_max, row['Increment']
-    except Exception:
-        st.error(f"Missing '{lift_name}' data!")
+    except:
+        st.error(f"Missing data for {lift_name}!")
         return 0, 0
 
 # --- 6. MAIN WORKOUT UI ---
 st.title(f"Workout: {current_user} (Week {week})")
-tab1, tab2, tab3 = st.tabs(["Monday", "Wednesday", "Friday"])
+tab1, tab2, tab3 = st.tabs(["Monday (Heavy)", "Wednesday (Light)", "Friday (Intensity)"])
 
-with tab1: # Monday (Volume)
+with tab1: # Monday
     for lift in ["Squat", "Bench", "Row"]:
         m_max, _ = get_stats(lift)
         m_top = custom_round(m_max, round_val)
@@ -123,9 +121,8 @@ with tab1: # Monday (Volume)
             st.subheader(lift)
             st.write(f"Ramps (x5): {' → '.join(map(str, ramps))}")
             st.markdown(f"**TOP SET: :green[{m_top} lbs] x 5**")
-            
 
-with tab2: # Wednesday (Recovery)
+with tab2: # Wednesday
     sq_max, _ = get_stats("Squat")
     sq_wed_top = custom_round(sq_max * 0.75, round_val)
     
@@ -140,23 +137,23 @@ with tab2: # Wednesday (Recovery)
         with st.container(border=True):
             st.subheader(name)
             st.write(f"Ramps: {' → '.join(map(str, sets[:-1]))} → **{sets[-1]} x 5**")
-            st.caption(f"Plates: {get_plate_breakdown(sets[-1], bar_wt)}")
 
-with tab3: # Friday (Intensity)
+with tab3: # Friday
     for lift in ["Squat", "Bench", "Row"]:
         mon_max, inc = get_stats(lift)
         mon_top = custom_round(mon_max, round_val)
         friday_triple = custom_round(mon_max * (1 + (inc / 100)), round_val)
         base_ramps = get_madcow_ramps(mon_top, round_val)
+        
         with st.container(border=True):
             st.subheader(lift)
             c1, c2, c3 = st.columns(3)
-            with c1: 
+            with c1:
                 st.write("**Ramp (x5)**")
                 st.write(f"{' , '.join(map(str, base_ramps))}")
-            with c2: 
-                st.write("**Triple (x3)**")
+            with c2:
+                st.write("**The Triple (x3)**")
                 st.markdown(f"### :orange[{friday_triple}]")
-            with c3: 
-                st.write("**Back (x8)**")
+            with c3:
+                st.write("**Back-off (x8)**")
                 st.markdown(f"### {base_ramps[2]}")
