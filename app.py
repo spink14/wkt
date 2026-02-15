@@ -19,25 +19,19 @@ def load_data():
     
     # Load Settings Data (Settings tab)
     try:
-        # Use ttl=0 to ensure we aren't getting a cached version of the date
         settings_df = conn.read(spreadsheet=SHEET_URL, worksheet="Settings", ttl=0)
-        
-        # Filter for the start_date row specifically
         date_row = settings_df[settings_df['Attribute'] == 'start_date']
         
         if not date_row.empty:
             raw_val = date_row['Value'].values[0]
-            # pd.to_datetime is the safest way to convert GSheet data to a date object
             stored_date = pd.to_datetime(raw_val).date()
         else:
             stored_date = date.today()
     except Exception:
-        # Fallback to today if the Settings sheet hasn't been created yet
         stored_date = date.today()
         
     return df, stored_date
 
-# Initialize session state (Only runs once)
 if 'df_all' not in st.session_state:
     st.session_state.df_all, st.session_state.start_date = load_data()
 
@@ -69,19 +63,23 @@ with st.sidebar:
     current_user = st.radio("Lifter Selection:", ["Dylan", "Dane"], horizontal=True)
     
     st.divider()
+    # RESTORED PLATE CALCULATOR
+    st.header("🧮 Plate Calculator")
+    calc_target = st.number_input("Weight to Check", value=135, step=5)
+    bar_wt = st.number_input("Barbell Weight", value=45, step=5)
+    st.info(f"**Load per side:** {get_plate_breakdown(calc_target, bar_wt)}")
+    
+    st.divider()
     st.header("⚙️ Program Settings")
     
-    # 1. Date Input: Initialized with value from Sheets
     picked_date = st.date_input(
         "Program Start Date", 
         value=st.session_state.start_date,
         key="date_picker"
     )
     
-    # 2. Update session state with picked date
     st.session_state.start_date = picked_date
     
-    # 3. Calculate Week
     days_elapsed = (date.today() - picked_date).days
     auto_week = max(1, (days_elapsed // 7) + 1)
     
@@ -109,26 +107,15 @@ with st.sidebar:
     if st.button("💾 Sync to Cloud"):
         with st.status("Pushing data to Google Sheets...", expanded=False) as status:
             try:
-                # Save Weights
                 conn.update(spreadsheet=SHEET_URL, data=st.session_state.df_all)
-                
-                # Save Date
                 settings_to_save = pd.DataFrame([
                     {"Attribute": "start_date", "Value": str(st.session_state.start_date)}
                 ])
                 conn.update(spreadsheet=SHEET_URL, worksheet="Settings", data=settings_to_save)
-                
-                # Clear Cache
                 st.cache_data.clear()
-                
-                # 1. Immediate Feedback (The Toast)
                 st.toast("Sync Successful!", icon='✅')
-                
                 status.update(label="Cloud Sync Complete!", state="complete", expanded=False)
-
-                # 3. Force the app to "remember" the success state briefly
                 st.session_state.sync_success = True
-                
             except Exception as e:
                 st.error(f"Sync failed: {e}")
 
@@ -158,7 +145,6 @@ with tab1: # Monday
             st.write(f"Ramps (x5): {' → '.join(map(str, ramps))}")
             st.markdown(f"**TOP SET: :green[{m_top} lbs] x 5**")
 
-# (Wednesday and Friday logic remains identical to your working version)
 with tab2: # Wednesday
     sq_max, _ = get_stats("Squat")
     sq_wed_top = custom_round(sq_max * 0.75, round_val)
