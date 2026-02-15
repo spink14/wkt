@@ -59,7 +59,7 @@ def get_plate_breakdown(target_weight, bar_weight):
 
 # --- 4. SIDEBAR ---
 with st.sidebar:
-    st.title("Madcow Duo")
+    st.title("🐱Danylan Workout🐱")
     current_user = st.radio("Lifter Selection:", ["Dylan", "Dane"], horizontal=True)
     
     st.divider()
