@@ -64,7 +64,7 @@ with st.sidebar:
     
     st.divider()
     # RESTORED PLATE CALCULATOR
-    st.header("🧮 Plate Calculator")
+    st.header("💅Plate Calculator")
     calc_target = st.number_input("Weight to Check", value=135, step=5)
     bar_wt = st.number_input("Barbell Weight", value=45, step=5)
     st.info(f"**Load per side:** {get_plate_breakdown(calc_target, bar_wt)}")
