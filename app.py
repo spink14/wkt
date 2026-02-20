@@ -147,11 +147,13 @@ with tab1: # Monday
 
 with tab2: # Wednesday
     sq_max, _ = get_stats("Squat")
-    sq_wed_top = custom_round(sq_max * 0.75, round_val)
-    wed_lifts = [("Squat (Light)", sq_wed_top), ("Overhead Press", get_stats("Overhead Press")[0]), ("Deadlift", get_stats("Deadlift")[0])]
+    wed_lifts = [("Squat (Light)", sq_max), ("Overhead Press", get_stats("Overhead Press")[0]), ("Deadlift", get_stats("Deadlift")[0])]
     for name, weight in wed_lifts:
         top = custom_round(weight, round_val)
-        sets = [custom_round(top * i, round_val) for i in [0.5, 0.625, 0.75, 1.0]]
+        if name == "Squat (Light)":
+            sets = [custom_round(top * i, round_val) for i in [0.5, 0.625, 0.75, .75]]
+        else:
+            sets = [custom_round(top * i, round_val) for i in [0.5, 0.625, 0.75, 1.0]]
         with st.container(border=True):
             st.subheader(name)
             st.write(f"Ramps (x5): {' → '.join(map(str, sets[:-1]))} → **{sets[-1]}**")
