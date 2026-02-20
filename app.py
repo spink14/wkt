@@ -144,8 +144,8 @@ tab1, tab2, tab3 = st.tabs(["Monday", "Wednesday", "Friday"])
 
 with tab1: # Monday
     for lift in ["Squat", "Bench", "Row"]:
-        m_max, _ = get_stats(lift)
-        m_top = custom_round(m_max, round_val)
+        m_top, _ = get_stats(lift)
+        # m_top = custom_round(m_max, round_val)
         ramps = get_madcow_ramps(m_top, round_val)
         with st.container(border=True):
             st.subheader(lift)
