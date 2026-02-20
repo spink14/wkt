@@ -157,7 +157,7 @@ with tab2: # Wednesday
     wed_lifts = [("Squat (Light)", sq_max), ("Overhead Press", get_stats("Overhead Press")[0]), ("Deadlift", get_stats("Deadlift")[0])]
     for name, weight in wed_lifts:
         top = custom_round(weight, round_val)
-        if name == "Squat (Light)":
+        if "Squat" in name:
             sets = [custom_round(top * i, round_val) for i in [0.5, 0.625, 0.75, .75]]
         else:
             sets = [custom_round(top * i, round_val) for i in [0.5, 0.625, 0.75, 1.0]]
