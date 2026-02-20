@@ -161,7 +161,7 @@ with tab2: # Wednesday
             sets = [custom_round(top * i, round_val) for i in [0.5, 0.625, 0.75, .75]]
             print(sets)
         else:
-            sets = [custom_round(top * i, round_val) for i in [0.5, 0.625, 0.75, 1.0]]
+            sets = [custom_round(top * i, round_val) for i in [0.625, 0.75, 0.875, 1.0]]
         with st.container(border=True):
             st.subheader(name)
             st.write(f"Ramps (x5): {' → '.join(map(str, sets[:-1]))} → **{sets[-1]}**")
