@@ -2,6 +2,7 @@ import streamlit as st
 from streamlit_gsheets import GSheetsConnection
 import pandas as pd
 from datetime import datetime, date
+import math
 
 # --- 1. PAGE SETUP ---
 st.set_page_config(page_title="Dylan & Dane Madcow Pro", layout="wide")
@@ -36,8 +37,14 @@ if 'df_all' not in st.session_state:
     st.session_state.df_all, st.session_state.start_date = load_data()
 
 # --- 3. HELPER FUNCTIONS ---
+
+def normround(x):
+    frac = x - math.floor(x)
+    if frac < 0.5: return math.floor(x)
+    return math.ceil(x)
+
 def custom_round(x, base=5):
-    return (base * round(float(x)/base))
+    return (base * normround(float(x)/base))
 
 def get_madcow_ramps(top_weight, round_to=5):
     intervals = [0.50, 0.625, 0.75, 0.875]
